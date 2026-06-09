@@ -38,7 +38,7 @@
  * default elsewhere.
  */
 import { useCallback, useMemo } from "react";
-import { Linking, View } from "react-native";
+import { Linking, Platform, View } from "react-native";
 import { router } from "expo-router";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import type { Attachment } from "@multica/core/types";
@@ -189,6 +189,14 @@ export function Markdown({
                 markdownStyle={markdownStyle}
                 onLinkPress={onLinkPress}
                 selectable={selectable}
+                // Android-only: the github-flavor container renderer reports a
+                // height ~one line short of the painted text, so the last line
+                // spills below any parent background (e.g. the comment bubble's
+                // `bg-surface-1`). Keeping the last block's trailing margin pads
+                // the native view's reported height back out to cover the text.
+                // iOS measures correctly and keeps the tight default (no extra
+                // bottom gap) — preserve the iOS baseline.
+                allowTrailingMargin={Platform.OS === "android"}
               />
             );
           case "code":
