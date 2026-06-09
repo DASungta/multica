@@ -49,6 +49,16 @@ import { splitMarkdown } from "./split-markdown";
 import { CodeBlock } from "./code-block";
 import { MarkdownImage } from "./markdown-image";
 
+// Android-only bottom padding for the native markdown container. The
+// github-flavor enriched-markdown renderer under-measures its height on
+// Android by ~one line, so without this the last line spills below any parent
+// background (the comment bubble's `bg-surface-1`). Padding the container's
+// bottom grows its reported height enough to cover the text — unlike
+// `allowTrailingMargin`, it only grows the container and does NOT re-introduce
+// the last block's paragraph spacing. Module-level constant so the object
+// identity stays stable across renders (no redundant native prop updates).
+const ANDROID_CONTAINER_STYLE = { paddingBottom: 12 };
+
 interface Props {
   content: string;
   /**
@@ -189,14 +199,14 @@ export function Markdown({
                 markdownStyle={markdownStyle}
                 onLinkPress={onLinkPress}
                 selectable={selectable}
-                // Android-only: the github-flavor container renderer reports a
-                // height ~one line short of the painted text, so the last line
-                // spills below any parent background (e.g. the comment bubble's
-                // `bg-surface-1`). Keeping the last block's trailing margin pads
-                // the native view's reported height back out to cover the text.
-                // iOS measures correctly and keeps the tight default (no extra
-                // bottom gap) — preserve the iOS baseline.
-                allowTrailingMargin={Platform.OS === "android"}
+                // Android-only height fix (see ANDROID_CONTAINER_STYLE). iOS
+                // measures correctly and keeps the tight default — preserve the
+                // iOS baseline.
+                containerStyle={
+                  Platform.OS === "android"
+                    ? ANDROID_CONTAINER_STYLE
+                    : undefined
+                }
               />
             );
           case "code":
