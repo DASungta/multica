@@ -9,11 +9,13 @@
  * the legacy `useRunsSheetStore` is gone since the route system is the
  * single source of truth for what's open.
  *
- * Past-row tap is a no-op in v1 — transcript drilldown is deferred.
+ * Tapping any row (active or past) pushes the run-detail transcript sheet
+ * (`runs/[taskId]`), which streams live steps for an in-flight run and
+ * lazy-loads the persisted transcript for a terminal one.
  */
 import { useMemo } from "react";
 import { ScrollView, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import type { AgentTask } from "@multica/core/types";
 import { Text } from "@/components/ui/text";
@@ -35,7 +37,11 @@ const PAST_STATUS_ORDER: Record<AgentTask["status"], number> = {
 };
 
 export default function IssueRunsRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { workspace, id } = useLocalSearchParams<{
+    workspace: string;
+    id: string;
+  }>();
+  const router = useRouter();
   const wsId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { data: activeTasks = [] } = useQuery(
     issueActiveTasksOptions(wsId, id),
@@ -76,14 +82,32 @@ export default function IssueRunsRoute() {
           {active.length > 0 ? (
             <Section title="Active">
               {active.map((task) => (
-                <RunRow key={task.id} task={task} issueId={id} />
+                <RunRow
+                  key={task.id}
+                  task={task}
+                  issueId={id}
+                  onPress={() =>
+                    router.push(
+                      `/${workspace}/issue/${id}/runs/${task.id}`,
+                    )
+                  }
+                />
               ))}
             </Section>
           ) : null}
           {past.length > 0 ? (
             <Section title="Past">
               {past.map((task) => (
-                <RunRow key={task.id} task={task} issueId={id} />
+                <RunRow
+                  key={task.id}
+                  task={task}
+                  issueId={id}
+                  onPress={() =>
+                    router.push(
+                      `/${workspace}/issue/${id}/runs/${task.id}`,
+                    )
+                  }
+                />
               ))}
             </Section>
           ) : null}
