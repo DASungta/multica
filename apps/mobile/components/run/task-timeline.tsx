@@ -1,14 +1,20 @@
 /**
  * Per-task execution trace — what the agent is/was thinking and which tools
- * it called. Rendered:
+ * it called. Shared between two consumers:
  *
- *   - Live (under the StatusPill while a task is in flight), AND
- *   - Persisted (under the assistant bubble once the message has landed)
+ *   - Chat (live under the StatusPill while a task is in flight, and
+ *     persisted under the assistant bubble once the message has landed).
+ *   - Issue run detail (`issue/[id]/runs/[taskId]`) — live + historical.
  *
  * Process steps (thinking / tool_use / tool_result / error) collapse
  * behind a single "N steps" toggle. Final text is NOT rendered here —
  * the parent renders the assistant message's `content` (or the latest
  * streaming text) as its own markdown block.
+ *
+ * Items are coalesced via `coalesceTaskMessages` before filtering so the
+ * "N steps" count matches web's transcript (the daemon flushes a long
+ * thinking/text stream as many tiny `seq` rows). See that helper for the
+ * behavioral-parity rationale.
  *
  * Folds use RNR `Collapsible` (built on `@rn-primitives/collapsible`).
  * The earlier version of this file hand-rolled four separate
@@ -23,6 +29,7 @@
 import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { TaskMessagePayload } from "@multica/core/types";
+import { coalesceTaskMessages } from "@/lib/task-timeline-coalesce";
 import { Text } from "@/components/ui/text";
 import {
   Collapsible,
@@ -37,8 +44,10 @@ interface Props {
   isStreaming?: boolean;
 }
 
-export function ChatTimeline({ items, isStreaming = false }: Props) {
-  const processSteps = items.filter((i) => i.type !== "text");
+export function TaskTimeline({ items, isStreaming = false }: Props) {
+  const processSteps = coalesceTaskMessages(items).filter(
+    (i) => i.type !== "text",
+  );
   if (processSteps.length === 0) return null;
 
   return (

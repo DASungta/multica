@@ -57,7 +57,7 @@ import { cn } from "@/lib/utils";
 import { useChatSelectStore } from "@/data/chat-select-store";
 import { useChatMessageLongPress } from "./message-long-press";
 import { ChatEmptyState } from "./chat-empty-state";
-import { ChatTimeline } from "./chat-timeline";
+import { TaskTimeline } from "@/components/run/task-timeline";
 import { StatusPill } from "./status-pill";
 import {
   Collapsible,
@@ -172,7 +172,7 @@ export function ChatMessageList({
         showLiveSection ? (
           <View style={{ paddingTop: 12 }} className="gap-2">
             {showLiveTimeline ? (
-              <ChatTimeline items={liveTaskMessages ?? []} isStreaming />
+              <TaskTimeline items={liveTaskMessages ?? []} isStreaming />
             ) : null}
             <StatusPill
               pendingTask={pendingTask}
@@ -322,7 +322,7 @@ function AssistantRow({
   const body = (
     <View className="gap-1.5">
       {timeline.length > 0 ? (
-        <ChatTimeline items={timeline} />
+        <TaskTimeline items={timeline} />
       ) : null}
       <Markdown
         content={message.content}
