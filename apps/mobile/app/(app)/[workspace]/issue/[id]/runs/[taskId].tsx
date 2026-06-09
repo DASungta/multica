@@ -20,7 +20,6 @@ import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import type { AgentTask, TaskMessagePayload } from "@multica/core/types";
 import { Text } from "@/components/ui/text";
-import { Markdown } from "@/lib/markdown";
 import { ActorAvatar } from "@/components/ui/actor-avatar";
 import { TaskTimeline } from "@/components/run/task-timeline";
 import { StatusPill } from "@/components/chat/status-pill";
@@ -40,7 +39,6 @@ import { useTaskMessagesRealtime } from "@/data/realtime/use-task-messages-realt
 import { useActorLookup } from "@/data/use-actor-name";
 import { useWorkspaceStore } from "@/data/workspace-store";
 import { useAgentPresence } from "@/lib/use-agent-presence";
-import { coalesceTaskMessages } from "@/lib/task-timeline-coalesce";
 import { timeAgo } from "@/lib/time-ago";
 
 export default function IssueRunDetailRoute() {
@@ -116,18 +114,6 @@ function RunDetailBody({
     ? { task_id: task.id, status: task.status, created_at: task.created_at }
     : null;
 
-  // Final assistant answer = coalesced `text` rows. TaskTimeline renders only
-  // the process steps, mirroring chat where the parent renders the text body.
-  const finalText = useMemo(
-    () =>
-      coalesceTaskMessages(messages)
-        .filter((m) => m.type === "text")
-        .map((m) => m.content ?? "")
-        .join("")
-        .trim(),
-    [messages],
-  );
-
   return (
     <View className="flex-1">
       {/* Header — SHEET_OPTIONS sets headerShown:false, so the body owns it. */}
@@ -155,6 +141,12 @@ function RunDetailBody({
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        // Android: this sheet falls back to a draggable bottom-sheet modal.
+        // Without nested scrolling, a downward drag once the content is
+        // scrolled hands the gesture to the sheet (drags the whole control)
+        // instead of scrolling the transcript back up. No-op on iOS, where
+        // UISheetPresentationController already coordinates scroll vs. drag.
+        nestedScrollEnabled
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
       >
         <View className="gap-3">
@@ -169,18 +161,20 @@ function RunDetailBody({
             />
           ) : null}
 
-          {/* Step trace (coalesced inside TaskTimeline). */}
-          <TaskTimeline items={messages} isStreaming={active} />
+          {/* Full transcript (coalesced inside TaskTimeline). Unlike chat,
+              this view passes `includeText` so the agent's narration / answer
+              renders inline as green "Agent" rows in chronological order,
+              mirroring web's AgentTranscriptDialog; `defaultOpen` shows the
+              trace without a tap since this sheet IS the transcript. */}
+          <TaskTimeline
+            items={messages}
+            isStreaming={active}
+            includeText
+            defaultOpen
+          />
 
           {/* Failure summary above the trace's own error rows. */}
           {task.status === "failed" ? <FailureNotice task={task} /> : null}
-
-          {/* Final assistant answer. */}
-          {finalText ? (
-            <View className="rounded-lg border border-border bg-muted/10 px-3 py-2">
-              <Markdown content={finalText} />
-            </View>
-          ) : null}
 
           {/* Terminal run with nothing recorded (e.g. cancelled before any
               step) — say so rather than render an empty sheet. */}

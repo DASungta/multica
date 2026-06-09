@@ -31,6 +31,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { TaskMessagePayload } from "@multica/core/types";
 import { coalesceTaskMessages } from "@/lib/task-timeline-coalesce";
 import { Text } from "@/components/ui/text";
+import { Markdown } from "@/lib/markdown";
 import {
   Collapsible,
   CollapsibleContent,
@@ -42,16 +43,31 @@ interface Props {
   /** Whether the owning task is still running. Drives the default-open
    *  state and the dot-pulse next to the trigger. */
   isStreaming?: boolean;
+  /** Render `text` rows (the agent's narration / final answer) inline as
+   *  green "Agent" rows, mirroring web's AgentTranscriptDialog. Chat leaves
+   *  this false because the assistant text is rendered as the bubble body;
+   *  the run-detail transcript turns it on so the interspersed agent
+   *  messages appear in chronological position instead of being dropped. */
+  includeText?: boolean;
+  /** Override the fold's initial open state. Defaults to `isStreaming`.
+   *  The run-detail transcript passes `true` so the trace is visible on
+   *  open even for a terminal run. */
+  defaultOpen?: boolean;
 }
 
-export function TaskTimeline({ items, isStreaming = false }: Props) {
-  const processSteps = coalesceTaskMessages(items).filter(
-    (i) => i.type !== "text",
+export function TaskTimeline({
+  items,
+  isStreaming = false,
+  includeText = false,
+  defaultOpen,
+}: Props) {
+  const processSteps = coalesceTaskMessages(items).filter((i) =>
+    includeText ? true : i.type !== "text",
   );
   if (processSteps.length === 0) return null;
 
   return (
-    <Collapsible defaultOpen={isStreaming}>
+    <Collapsible defaultOpen={defaultOpen ?? isStreaming}>
       <CollapsibleTrigger asChild>
         <View
           accessibilityRole="button"
@@ -87,6 +103,8 @@ function StreamingDot() {
 
 function StepRow({ item }: { item: TaskMessagePayload }) {
   switch (item.type) {
+    case "text":
+      return <AgentTextRow item={item} />;
     case "thinking":
       return <ThinkingRow item={item} />;
     case "tool_use":
@@ -98,6 +116,44 @@ function StepRow({ item }: { item: TaskMessagePayload }) {
     default:
       return null;
   }
+}
+
+/**
+ * Agent narration / answer. Only reached when the parent passes
+ * `includeText` (run-detail transcript); chat filters `text` out upstream
+ * and renders it as the assistant bubble body instead. Mirror of web's
+ * `TranscriptEventRow` "agent" branch — a green "Agent" badge, the first
+ * non-empty line as the collapsed summary, full markdown on expand.
+ */
+function AgentTextRow({ item }: { item: TaskMessagePayload }) {
+  const text = item.content ?? "";
+  if (!text) return null;
+  const firstLine = text.split("\n").find((l) => l.trim().length > 0) ?? text;
+  const preview =
+    firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : firstLine;
+  return (
+    <Collapsible>
+      <CollapsibleTrigger asChild>
+        <View className="py-0.5 flex-row items-center gap-1.5 active:opacity-70">
+          <Ionicons name="chevron-forward" size={12} color="#71717a" />
+          <View className="rounded bg-success/15 px-1.5 py-0.5">
+            <Text className="text-[10px] font-medium text-success">Agent</Text>
+          </View>
+          <Text
+            className="flex-1 text-xs text-muted-foreground"
+            numberOfLines={1}
+          >
+            {preview}
+          </Text>
+        </View>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <View className="ml-4 mt-1 rounded bg-success/5 px-2 py-1.5">
+          <Markdown content={text} compact selectable={false} />
+        </View>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function ThinkingRow({ item }: { item: TaskMessagePayload }) {
