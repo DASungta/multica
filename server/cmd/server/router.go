@@ -449,42 +449,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		realtime.HandleWebSocket(hub, mc, pr, slugResolver, w, r)
 	})
 
-	// Local file serving (when using local storage).
-	//
-	// The disclosure (security-findings-2026-06-02) explicitly flagged this
-	// route as a layer in the SVG-XSS chain: it was unauthenticated, served
-	// directory listings, and lacked nosniff/CSP. The primary fix (PR #3023)
-	// broke the inline-render step by forcing Content-Disposition: attachment
-	// for non-media types, but the layered defenses here stay open until we
-	// add them.
-	//
-	// Auth dispatch is two-track:
-	//   - Signed-query (?exp=&sig=): the route bypasses middleware.Auth and
-	//     ServeLocalUpload validates the HMAC signature itself. This is the
-	//     path used by token-auth clients (Desktop, legacy-token Web,
-	//     mobile) for inline <img>/<video>/<iframe> resource loads —
-	//     browsers do not attach Authorization headers to those, so a
-	//     server-side mediated short-lived signed URL is the only way to
-	//     keep them working after we authenticate /uploads/*. Mirror of
-	//     S3 + CloudFront's presigned-URL flow.
-	//   - Bearer / cookie: middleware.Auth runs first, then
-	//     ServeLocalUpload enforces workspace membership.
+	// Local file serving (when using local storage)
 	if local, ok := store.(*storage.LocalStorage); ok {
-		inner := h.ServeLocalUpload(local)
-		authed := middleware.Auth(queries, patCache, cloudPATVerifier)(inner)
 		r.Get("/uploads/*", func(w http.ResponseWriter, r *http.Request) {
-			// If the request carries BOTH signed-query parameters,
-			// route it to the inner handler with no Auth wrapper —
-			// the signature itself is the authority. ServeLocalUpload
-			// fails the request closed if either is malformed or
-			// expired, so a partial signature is not a downgrade
-			// path to "no auth."
-			exp, sig := storage.LocalUploadSignatureFromQuery(r.URL.Query())
-			if exp != "" && sig != "" {
-				inner.ServeHTTP(w, r)
-				return
-			}
-			authed.ServeHTTP(w, r)
+			file := strings.TrimPrefix(r.URL.Path, "/uploads/")
+			local.ServeFile(w, r, file)
 		})
 	}
 
@@ -577,6 +546,18 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		r.Post("/api/cli-token", h.IssueCliToken)
 		r.Post("/api/upload-file", h.UploadFile)
 		r.Post("/api/feedback", h.CreateFeedback)
+
+		// Attachment download — user-scoped (auth-only), NOT
+		// workspace-scoped. The handler self-resolves the workspace
+		// from the attachment row and enforces membership inside, so
+		// this route is callable as a native browser <img>/<video>
+		// src that cannot attach X-Workspace-Slug / X-Workspace-ID
+		// headers. Persisting `/api/attachments/<id>/download` into
+		// comment markdown depends on this — see MUL-3130. The
+		// metadata / delete endpoints below stay workspace-scoped
+		// because they are JSON-API consumers that always have
+		// workspace context.
+		r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
 
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
@@ -723,6 +704,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/", h.GetIssue)
 					r.Put("/", h.UpdateIssue)
 					r.Delete("/", h.DeleteIssue)
+					r.Post("/comments/trigger-preview", h.PreviewCommentTriggers)
 					r.Post("/comments", h.CreateComment)
 					r.Get("/comments", h.ListComments)
 					r.Get("/timeline", h.ListTimeline)
@@ -831,7 +813,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Attachments
 			r.Get("/api/attachments/{id}", h.GetAttachmentByID)
-			r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
+			// /api/attachments/{id}/download is registered in the
+			// outer Auth-only group above so it can be loaded as a
+			// native <img>/<video> src without workspace headers
+			// (MUL-3130). The handler self-resolves the workspace
+			// from the attachment row.
 			r.Get("/api/attachments/{id}/content", h.GetAttachmentContent)
 			r.Delete("/api/attachments/{id}", h.DeleteAttachment)
 
