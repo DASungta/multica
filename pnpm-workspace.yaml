@@ -4,6 +4,7 @@ packages:
 
 patchedDependencies:
   react-native-shiki-engine@0.3.10: patches/react-native-shiki-engine@0.3.10.patch
+  react-native-enriched-markdown@0.5.0: patches/react-native-enriched-markdown@0.5.0.patch
 
 catalog:
   # Core React

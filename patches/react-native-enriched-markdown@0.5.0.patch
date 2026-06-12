@@ -1,0 +1,38 @@
+diff --git a/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/TextViewSetup.kt b/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/TextViewSetup.kt
+index 1feab30e51c7d8dc030128d76e8a33fec7d03dbe..2bbdac5c7fb15cf932c5d8151cd8f61e53a6ff8c 100644
+--- a/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/TextViewSetup.kt
++++ b/android/src/main/java/com/swmansion/enriched/markdown/utils/text/view/TextViewSetup.kt
+@@ -1,7 +1,9 @@
+ package com.swmansion.enriched.markdown.utils.text.view
+ 
+ import android.graphics.Color
++import android.graphics.text.LineBreaker
+ import android.os.Build
++import android.text.Layout
+ import android.view.textclassifier.TextClassifier
+ import androidx.appcompat.widget.AppCompatTextView
+ import androidx.core.view.ViewCompat
+@@ -10,6 +12,23 @@ import com.swmansion.enriched.markdown.accessibility.AccessibleMarkdownTextView
+ fun AccessibleMarkdownTextView.setupAsMarkdownTextView() {
+   setBackgroundColor(Color.TRANSPARENT)
+   includeFontPadding = false
++  // Keep line-breaking identical to the height-measurement path. The
++  // ShadowNode measurement (MeasurementStore) and the editable input view
++  // both build their StaticLayout with BREAK_STRATEGY_HIGH_QUALITY (API 29+)
++  // and no hyphenation, but these read-only display TextViews used to fall
++  // back to the platform TextView defaults (SIMPLE break + a version-
++  // dependent hyphenation frequency). For a long unbreakable token — most
++  // visibly a URL inside a list item — the two strategies wrap to a
++  // different line count, so the view rendered one line taller than the
++  // measured height and the parent FrameLayout clipped the overflowing last
++  // line. Pinning the same strategy here keeps measure and render in
++  // lock-step. NONE matches the measurement on every API level; HIGH_QUALITY
++  // only diverges from the default at API 29+, so it is guarded to mirror
++  // MeasurementStore's own guard.
++  hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
++  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
++    breakStrategy = LineBreaker.BREAK_STRATEGY_HIGH_QUALITY
++  }
+   movementMethod = LinkLongPressMovementMethod.createInstance()
+   setTextIsSelectable(true)
+   customSelectionActionModeCallback = createSelectionActionModeCallback(this)
